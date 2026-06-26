@@ -1,0 +1,29 @@
+{
+  "name": "@gainable.dev/cli",
+  "version": "0.1.1",
+  "description": "Drive the Gainable harness from the command line.",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gainable-inc/cli.git"
+  },
+  "bin": {
+    "gaia": "bin/gaia.js"
+  },
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node bin/gaia.js"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "gainable/skills/"
+  ]
+}

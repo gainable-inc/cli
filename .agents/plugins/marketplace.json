@@ -1,0 +1,22 @@
+{
+  "name": "gainable",
+  "interface": {
+    "displayName": "Gainable Plugins"
+  },
+  "plugins": [
+    {
+      "name": "gainable",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/gainable-inc/cli.git",
+        "path": "./codex",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
