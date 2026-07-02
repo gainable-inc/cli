@@ -1,6 +1,6 @@
 {
   "name": "gainable",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Gainable harness control plane for OpenAI Codex — build, refine, and author code in Gainable apps. Bundles the gaia / gaia-code skills and a session-start orientation hook. Requires the gaia CLI: npm i -g \"@gainable.dev/cli\".",
   "author": { "name": "Gainable", "url": "https://gainable.com" },
   "homepage": "https://gainable.com",

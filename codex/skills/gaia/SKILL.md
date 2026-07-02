@@ -102,7 +102,9 @@ When `phase === 'autonomy'` and there are no asks, the contract is ready — the
 
 `gaia build` (no args) streams stage events as JSON Lines (stdout) while it runs, then exits: `0` on success, `3` on build failure, `1` on transport error. If the project isn't at `phaseLock='autonomy'` yet, the server returns 409 and the CLI surfaces the reason. The pipeline runs 90-180 seconds across 6-9 stages (models, seed, settings UI, main UI, register, copilot, autonomy, audit — some are conditional).
 
-Codex has no live task-checklist UI, so relay progress as plain text:
+**Run `gaia build` as a plain FOREGROUND command and read the stages from its stdout as they stream. Never background it** — no `Start-Process`, `nohup`, `&`, or redirect-to-file-and-poll. The command exits by itself when the pipeline finishes, and backgrounding breaks on Windows: `gaia` is an npm `.cmd` shim, so `Start-Process -FilePath 'gaia'` fails with `%1 is not a valid Win32 application`.
+
+Codex has no live task-checklist UI, so relay progress as plain text (if your plan/`update_plan` tool is available, you can additionally mirror the stages there — one item per stage, checked off on completion):
 
 1. **Before** running it, write one short line setting expectations: e.g. "Starting the build pipeline (typically 90-180 seconds); I'll post each stage as it completes."
 2. Run `gaia build` (no args) and read the streamed JSON-Lines stdout. Act on the events:
@@ -253,4 +255,5 @@ This is the exact silent kickoff the web builder sends after an import. From her
 5. **If `.gaia/project.json` is missing**, prompt the user to run `gaia init` (or use `gaia build "<idea>"` which auto-inits). Don't guess a `projectId`.
 6. **Inline the full spec — never a path or a summary.** When the user points at a spec/doc file, read it and pass its COMPLETE contents to `gaia build`. The harness can't see local files.
 7. **Relay build-pipeline progress as terse plain-text lines** (one per stage) and finish with the literal `app_launcher` URL. Never paraphrase or guess the launcher URL.
-8. **If `gaia` isn't installed**, tell the user to run `npm i -g "@gainable.dev/cli"` — this plugin doesn't bundle the binary.
+8. **Run gaia commands in the foreground, never backgrounded.** No `Start-Process`, `nohup`, `&`, or redirect-and-poll — every gaia command exits on its own, and on Windows `gaia` is an npm `.cmd` shim that `Start-Process` can't launch.
+9. **If `gaia` isn't installed**, tell the user to run `npm i -g "@gainable.dev/cli"` — this plugin doesn't bundle the binary.
