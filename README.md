@@ -17,7 +17,7 @@ Full docs: **https://docs.gainable.dev** (CLI &amp; plugins section).
 Requires Node.js 18+.
 
 ```bash
-npm i -g @gainable.dev/cli
+npm i -g "@gainable.dev/cli"
 gaia --version
 ```
 
@@ -37,7 +37,8 @@ The CLI works on its own, but it shines when your coding agent drives it. The ag
 **Claude Code**
 
 ```
-/plugin install https://github.com/gainable-inc/cli.git#gainable
+/plugin marketplace add gainable-inc/cli
+/plugin install gainable@gainable
 ```
 
 **OpenAI Codex**

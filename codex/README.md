@@ -8,7 +8,7 @@ Drive the Gainable harness from **OpenAI Codex**: build new apps, refine existin
 The plugin does **not** bundle a binary (Codex plugins aren't auto-added to PATH). The `gaia` CLI is delivered over npm — install it once:
 
 ```bash
-npm i -g @gainable.dev/cli
+npm i -g "@gainable.dev/cli"
 ```
 
 > Same `gaia` CLI used by the Claude Code plugin — one package, both ecosystems.
@@ -19,8 +19,8 @@ From the Gainable marketplace (git-backed):
 
 ```bash
 codex plugin marketplace add gainable-inc/cli
-# then install "gainable" from the Plugins directory, or:
-codex /plugins
+codex plugin add gainable@gainable
+# or install "gainable" interactively from /plugins inside a session
 ```
 
 For local development against this repo:
@@ -33,9 +33,11 @@ codex plugin marketplace add ./.agents/plugins   # repo-root marketplace
 
 ```bash
 mkdir my-app && cd my-app
-gaia init                  # writes .gaia/project.json + .gaia/.gitignore
+gaia init                  # writes .gaia/project.json + seeds .codex/rules/gaia.rules
 codex                      # the SessionStart hook orients Codex on the project
 ```
+
+The seeded `.codex/rules/gaia.rules` lets Codex run every `gaia` command without per-subcommand approval prompts (loaded once you trust the project — Codex plugins can't ship approval rules, so the CLI seeds them per workspace).
 
 ## Authentication
 
@@ -65,7 +67,7 @@ The skills relay every harness ask to you in plain chat (numbered list → reply
 
 Same harness, same CLI, same skills — two deltas, both because Codex's tool surface differs:
 
-- **No auto-PATH'd binary.** Codex plugins can't ship a binary on PATH, so `gaia` comes from `npm i -g @gainable.dev/cli` (the Claude plugin used to vendor it; both now share the npm package).
+- **No auto-PATH'd binary.** Codex plugins can't ship a binary on PATH, so `gaia` comes from `npm i -g "@gainable.dev/cli"` (the Claude plugin used to vendor it; both now share the npm package).
 - **Plain-chat asks + plain-text progress.** Codex has no `AskUserQuestion` or live task checklist, so the skills forward harness asks as numbered chat lists and relay build-pipeline progress as plain text lines (the Claude plugin uses `AskUserQuestion` + a `TaskList`).
 
 ## Updating
@@ -74,7 +76,7 @@ Same harness, same CLI, same skills — two deltas, both because Codex's tool su
 codex plugin marketplace upgrade
 ```
 
-Restart the Codex session so the refreshed skill descriptions are re-discovered. CLI logic + server routes are always latest; bump the CLI with `npm update -g @gainable.dev/cli`.
+Restart the Codex session so the refreshed skill descriptions are re-discovered. CLI logic + server routes are always latest; bump the CLI with `npm update -g "@gainable.dev/cli"`.
 
 ## What lives where
 

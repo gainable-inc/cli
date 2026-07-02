@@ -4,7 +4,7 @@ Drive the Gainable harness from Claude Code: build new apps, refine existing one
 
 - **Skills** — `gaia` (default, harness-driven refinement) and `gaia-code` (Claude-as-author mode, explicit opt-in)
 - **Slash commands** — `/gainable:chat`, `/gainable:build`, `/gainable:code`, `/gainable:apps`
-- **`gaia` CLI** — shared with the Codex plugin, delivered over npm (`npm i -g @gainable.dev/cli`); talks to the Gainable server over HTTP
+- **`gaia` CLI** — shared with the Codex plugin, delivered over npm (`npm i -g "@gainable.dev/cli"`); talks to the Gainable server over HTTP
 - **`SessionStart` hook** — reads `.gaia/project.json` if present and orients Claude on the project from turn 0
 - **Default permissions** — `gaia *` Bash patterns pre-allowed; no permission prompts
 
@@ -13,8 +13,9 @@ Drive the Gainable harness from Claude Code: build new apps, refine existing one
 Install the CLI (shared with the Codex plugin) and the plugin:
 
 ```
-npm i -g @gainable.dev/cli
-/plugin install https://github.com/gainable-inc/cli.git#gainable
+npm i -g "@gainable.dev/cli"
+/plugin marketplace add gainable-inc/cli
+/plugin install gainable@gainable
 ```
 
 Once installed, both skills, slash commands, and the SessionStart hook are available in every Claude Code session — no per-project setup of the toolkit. The plugin no longer bundles the `gaia` binary; it comes from the npm package above (the SessionStart hook reminds you if it's missing).
@@ -93,7 +94,7 @@ After update, restart Claude Code so the new skill descriptions are re-discovere
 
 ## Legacy fallback
 
-Users not yet on the plugin can still use the toolkit via `npm i -g @gainable.dev/cli` + `gaia init --legacy-skills`, which writes `.claude/skills/{gaia,gaia-code}/SKILL.md` per project (the pre-plugin behavior; the SKILL.md files are bundled in the npm package for this). Plan is to deprecate `--legacy-skills` once everyone's on the plugin.
+Users not yet on the plugin can still use the toolkit via `npm i -g "@gainable.dev/cli"` + `gaia init --legacy-skills`, which writes `.claude/skills/{gaia,gaia-code}/SKILL.md` per project (the pre-plugin behavior; the SKILL.md files are bundled in the npm package for this). Plan is to deprecate `--legacy-skills` once everyone's on the plugin.
 
 ## Development
 

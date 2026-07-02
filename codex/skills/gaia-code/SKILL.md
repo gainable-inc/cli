@@ -5,7 +5,7 @@ description: Use this skill ONLY when the user EXPLICITLY opts you into author-m
 
 # gaia code — you as the creative author, Gainable as the rails
 
-> **The `gaia` CLI is delivered via npm, not bundled in this plugin.** If a `gaia` command fails with "command not found", install it once: `npm i -g @gainable.dev/cli`, then `gaia login --key gak_... --api-base https://build.gainable.dev`.
+> **The `gaia` CLI is delivered via npm, not bundled in this plugin.** If a `gaia` command fails with "command not found", install it once: `npm i -g "@gainable.dev/cli"`, then `gaia login --key gak_... --api-base https://build.gainable.dev`.
 
 ## STOP — am I the right skill for this request?
 

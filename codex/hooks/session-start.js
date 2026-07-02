@@ -59,7 +59,7 @@ try {
 
   if (!gaiaOnPath()) {
     out.push(
-      `The gaia CLI isn't on PATH — install it with: npm i -g @gainable.dev/cli  ` +
+      `The gaia CLI isn't on PATH — install it with: npm i -g "@gainable.dev/cli"  ` +
       `(then 'gaia login --key gak_... --api-base https://build.gainable.dev').`
     );
   }

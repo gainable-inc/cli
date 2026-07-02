@@ -7,7 +7,7 @@ description: Use this skill as the DEFAULT for ANY change to a Gainable app — 
 
 This directory represents a Gainable app. The actual generated code (routes, models, views, agents) lives on the Gainable server. You drive everything through the `gaia` CLI — never edit files in this directory claiming they're the app.
 
-> **The `gaia` CLI is delivered via npm, not bundled in this plugin.** If a `gaia` command fails with "command not found", install it once: `npm i -g @gainable.dev/cli`, then `gaia login --key gak_... --api-base https://build.gainable.dev`.
+> **The `gaia` CLI is delivered via npm, not bundled in this plugin.** If a `gaia` command fails with "command not found", install it once: `npm i -g "@gainable.dev/cli"`, then `gaia login --key gak_... --api-base https://build.gainable.dev`.
 
 ## Two distinct "chats" — don't confuse them
 
@@ -253,4 +253,4 @@ This is the exact silent kickoff the web builder sends after an import. From her
 5. **If `.gaia/project.json` is missing**, prompt the user to run `gaia init` (or use `gaia build "<idea>"` which auto-inits). Don't guess a `projectId`.
 6. **Inline the full spec — never a path or a summary.** When the user points at a spec/doc file, read it and pass its COMPLETE contents to `gaia build`. The harness can't see local files.
 7. **Relay build-pipeline progress as terse plain-text lines** (one per stage) and finish with the literal `app_launcher` URL. Never paraphrase or guess the launcher URL.
-8. **If `gaia` isn't installed**, tell the user to run `npm i -g @gainable.dev/cli` — this plugin doesn't bundle the binary.
+8. **If `gaia` isn't installed**, tell the user to run `npm i -g "@gainable.dev/cli"` — this plugin doesn't bundle the binary.

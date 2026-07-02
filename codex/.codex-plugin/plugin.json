@@ -1,7 +1,7 @@
 {
   "name": "gainable",
-  "version": "0.6.0",
-  "description": "Gainable harness control plane for OpenAI Codex — build, refine, and author code in Gainable apps. Bundles the gaia / gaia-code skills and a session-start orientation hook. Requires the gaia CLI: npm i -g @gainable.dev/cli.",
+  "version": "0.6.1",
+  "description": "Gainable harness control plane for OpenAI Codex — build, refine, and author code in Gainable apps. Bundles the gaia / gaia-code skills and a session-start orientation hook. Requires the gaia CLI: npm i -g \"@gainable.dev/cli\".",
   "author": { "name": "Gainable", "url": "https://gainable.com" },
   "homepage": "https://gainable.com",
   "repository": "https://github.com/gainable-inc/cli",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Gainable",
     "shortDescription": "Build & refine Gainable apps from Codex",
-    "longDescription": "Drive the Gainable harness from Codex: build new apps from an idea or a spreadsheet, refine existing ones, or author app code yourself with the same validators the BuildAgent runs. Two skills — gaia (default, harness-driven, one cheap HTTP turn) and gaia-code (author-mode, pull a local mirror and push validated edits). Requires the gaia CLI on PATH (npm i -g @gainable.dev/cli).",
+    "longDescription": "Drive the Gainable harness from Codex: build new apps from an idea or a spreadsheet, refine existing ones, or author app code yourself with the same validators the BuildAgent runs. Two skills — gaia (default, harness-driven, one cheap HTTP turn) and gaia-code (author-mode, pull a local mirror and push validated edits). Requires the gaia CLI on PATH (npm i -g \"@gainable.dev/cli\").",
     "developerName": "Gainable",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],

@@ -83,6 +83,33 @@ function loadState(gaiaDir, name) {
   }
 }
 
+const CODEX_RULES = `# Written by the gaia CLI. Lets Codex run every gaia command without
+# per-subcommand approval prompts. Project-scoped: Codex loads this file
+# only after you trust the project. Claude Code ignores it (the gainable
+# plugin ships pre-allowed gaia permissions there).
+prefix_rule(
+    pattern = ["gaia"],
+    decision = "allow",
+    justification = "Gainable harness CLI - safe HTTP calls to the Gainable server",
+)
+`;
+
+/**
+ * Seed a project-scoped Codex execpolicy rule allowing all gaia commands.
+ * Codex plugins can't ship approval rules (unlike the Claude plugin's
+ * settings.json), so this is how a gaia workspace becomes prompt-free in
+ * Codex. Silent no-op when the file already exists — callers run on every
+ * `gaia code pull`.
+ */
+function seedCodexRules(cwd = process.cwd()) {
+  const rulesFile = path.join(cwd, '.codex', 'rules', 'gaia.rules');
+  if (fs.existsSync(rulesFile)) return false;
+  fs.mkdirSync(path.dirname(rulesFile), { recursive: true });
+  fs.writeFileSync(rulesFile, CODEX_RULES);
+  process.stderr.write('  + .codex/rules/gaia.rules (Codex runs gaia without approval prompts once the project is trusted)\n');
+  return true;
+}
+
 /**
  * Write `.gaia/project.json` + `.gaia/.gitignore` in the cwd for a project
  * that was just created server-side. Shared by the auto-init paths
@@ -100,6 +127,7 @@ function writeProjectFiles({ projectId, projectName, apiBase }) {
   }, null, 2) + '\n');
   fs.writeFileSync(path.join(gaiaDir, '.gitignore'),
     'last-asks.json\nlast-turn.json\nfiles-state.json\npreflight/\nimport-session.json\n');
+  seedCodexRules();
   return resolveProject({});
 }
 
@@ -109,6 +137,7 @@ module.exports = {
   saveState,
   loadState,
   writeProjectFiles,
+  seedCodexRules,
   PROJECT_DIRNAME,
   PROJECT_FILE
 };

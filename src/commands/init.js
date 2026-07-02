@@ -51,6 +51,10 @@ async function bootstrapProjectJson({ project: projectIdOverride, force } = {}) 
   const gaiaDir = path.join(cwd, '.gaia');
   const projectFile = path.join(gaiaDir, 'project.json');
 
+  // Before the early return so pre-existing workspaces pick the rules up
+  // on their next `gaia init` / `gaia code pull` (silent when present).
+  require('../project').seedCodexRules(cwd);
+
   if (fs.existsSync(projectFile) && !force) {
     return JSON.parse(fs.readFileSync(projectFile, 'utf8'));
   }

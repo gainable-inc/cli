@@ -1,6 +1,6 @@
 {
   "name": "@gainable.dev/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Drive the Gainable harness from the command line.",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
