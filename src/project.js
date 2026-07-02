@@ -126,7 +126,7 @@ function writeProjectFiles({ projectId, projectName, apiBase }) {
     apiBase,
   }, null, 2) + '\n');
   fs.writeFileSync(path.join(gaiaDir, '.gitignore'),
-    'last-asks.json\nlast-turn.json\nfiles-state.json\npreflight/\nimport-session.json\n');
+    'last-asks.json\nlast-turn.json\nfiles-state.json\npreflight/\nimport-session.json\nbuild-events.jsonl\n');
   seedCodexRules();
   return resolveProject({});
 }

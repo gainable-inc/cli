@@ -84,7 +84,7 @@ async function bootstrapProjectJson({ project: projectIdOverride, force } = {}) 
     { force: true, label: 'project.json' });
   writeFileIfMissing(
     path.join(gaiaDir, '.gitignore'),
-    'last-asks.json\nlast-turn.json\nfiles-state.json\npreflight/\nimport-session.json\n',
+    'last-asks.json\nlast-turn.json\nfiles-state.json\npreflight/\nimport-session.json\nbuild-events.jsonl\n',
     { force, label: '.gaia/.gitignore' }
   );
 

@@ -165,6 +165,9 @@ function makeSpinner() {
     frameIdx++;
   };
 
+  let lastNoteAt = 0;
+  let lastNoteText = '';
+
   return {
     start(text) {
       label = text;
@@ -175,6 +178,18 @@ function makeSpinner() {
       }
       render();
       timer = setInterval(render, 120);
+    },
+    // Heartbeat between stage boundaries for non-TTY consumers (agents,
+    // redirected logs): stages can run 30-60s+ with no ▶/✓ line, which
+    // reads as a stall once stdout JSON is redirected away. Prints a
+    // throttled sub-line per progress step; TTY users have the spinner.
+    note(text) {
+      if (isTTY || !text) return;
+      const now = Date.now();
+      if (text === lastNoteText || now - lastNoteAt < 4000) return;
+      lastNoteAt = now;
+      lastNoteText = text;
+      process.stderr.write(`    · ${String(text).replace(/_/g, ' ')}\n`);
     },
     succeed(text, suffix) {
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
@@ -277,6 +292,8 @@ async function kickPipeline(ctx) {
       spinner.succeed(currentLabel || `stage ${p.stageIndex}`, suffix);
     } else if (evt === 'workflow_stage_failed') {
       spinner.fail(currentLabel || `stage ${p.stageIndex}`, p.error);
+    } else if (evt === 'progress') {
+      spinner.note(p.step);
     } else if (evt === 'app_ready') {
       // Pipeline emits app_ready AFTER build_complete with appName.
       // If build_complete already landed (success path), this is the
@@ -374,3 +391,6 @@ module.exports = (program) => {
       return kickPipeline(ctx);
     });
 };
+
+// Exposed for tests (heartbeat throttling); not part of the CLI surface.
+module.exports.makeSpinner = makeSpinner;

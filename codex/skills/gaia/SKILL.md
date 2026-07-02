@@ -102,24 +102,25 @@ When `phase === 'autonomy'` and there are no asks, the contract is ready — the
 
 `gaia build` (no args) streams stage events as JSON Lines (stdout) while it runs, then exits: `0` on success, `3` on build failure, `1` on transport error. If the project isn't at `phaseLock='autonomy'` yet, the server returns 409 and the CLI surfaces the reason. The pipeline runs 90-180 seconds across 6-9 stages (models, seed, settings UI, main UI, register, copilot, autonomy, audit — some are conditional).
 
-**Run `gaia build` as a plain FOREGROUND command and read the stages from its stdout as they stream. Never background it** — no `Start-Process`, `nohup`, `&`, or redirect-to-file-and-poll. The command exits by itself when the pipeline finishes, and backgrounding breaks on Windows: `gaia` is an npm `.cmd` shim, so `Start-Process -FilePath 'gaia'` fails with `%1 is not a valid Win32 application`.
+**Run the pipeline as a plain FOREGROUND command with stdout redirected to a file:**
 
-Codex has no live task-checklist UI, so relay progress as plain text (if your plan/`update_plan` tool is available, you can additionally mirror the stages there — one item per stage, checked off on completion):
+```
+gaia build > .gaia/build-events.jsonl
+```
 
-1. **Before** running it, write one short line setting expectations: e.g. "Starting the build pipeline (typically 90-180 seconds); I'll post each stage as it completes."
-2. Run `gaia build` (no args) and read the streamed JSON-Lines stdout. Act on the events:
-   - `workflow_stage_started` `{ stageIndex, type, title }` — optionally note the stage is running.
-   - `workflow_stage_complete` `{ stageIndex, filesCreated?, ... }` — post one short line: `✓ <title>` (suffix `(<filesCreated> files)` when present).
-   - `workflow_stage_failed` `{ stageIndex, error }` — post the failure as a plain line: `✗ <title> — <error>`.
-   - `build_complete` `{ success, ... }` — outcome signal. On success, DON'T write the summary yet (the launcher URL arrives next). On failure, write the error now.
-   - `app_launcher` `{ url, appName }` — the canonical launcher URL, CLI-synthesized right after `build_complete`. **Write a SHORT success line that pastes `payload.url` literally** so the user has a click target:
-     - `Build succeeded — open: {url}`
-     - `Done. App ready: {url}`
-3. Keep the per-stage lines terse (one line each, no headers). On success, the summary is one acknowledgement line + the literal URL — do NOT re-enumerate every stage.
+**Never background it** — no `Start-Process`, `nohup`, `&`, or polling wrappers. The command exits by itself when the pipeline finishes, and backgrounding breaks on Windows: `gaia` is an npm `.cmd` shim, so `Start-Process -FilePath 'gaia'` fails with `%1 is not a valid Win32 application`.
 
-**Never construct the launcher URL yourself.** `payload.url` is the only safe URL — it's the main-app `/apps/<appName>` route on whichever apiBase the user authenticated against. Do NOT hardcode a host, and do NOT substitute the public `<app>.localhost` Traefik URL (it 401s without the auth key the iframe-launcher injects). If the stream ends without an `app_launcher` event (older CLI, dropped stream), fall back to the `build_complete` success signal and tell the user the build finished — without surfacing a guessed URL.
+Why the redirect: your shell call is atomic — you cannot react to events mid-command anyway. With the JSON stdout out of the way, the user watches the CLI's own stderr checklist stream live in the command cell: `▶ <stage>` on start, throttled `· <step>` heartbeat lines while a stage runs, `✓ <stage> (Ns)` on completion, and finally `✓ build succeeded — open: <url>`. That stderr stream IS the live checklist — never re-enumerate the stages in chat afterwards.
 
-Do not dump raw JSON to the chat — the per-stage lines + the final URL line are enough.
+1. **Before** running it, write one short line setting expectations: e.g. "Starting the build pipeline (typically 90-180 seconds) — the stages stream in the command output below."
+2. Run the redirected command above and wait for it to exit.
+3. **After** it exits, write ONE short line:
+   - Exit `0`: paste the launcher URL **literally from the final `✓ build succeeded — open: <url>` stderr line** (same value as the `app_launcher` event's `payload.url` in `.gaia/build-events.jsonl`): e.g. `Build succeeded — open: {url}`.
+   - Exit `3`: report the `✗`-line failure plainly; the full event record is in `.gaia/build-events.jsonl` if you need details.
+
+**Never construct the launcher URL yourself.** The CLI-emitted URL is the only safe one — it's the main-app `/apps/<appName>` route on whichever apiBase the user authenticated against. Do NOT hardcode a host, and do NOT substitute the public `<app>.localhost` Traefik URL (it 401s without the auth key the iframe-launcher injects). If neither the stderr URL line nor an `app_launcher` event exists (older CLI, dropped stream), tell the user the build finished — without surfacing a guessed URL.
+
+Do not dump raw JSON to the chat — the streaming stderr checklist + your one summary line are enough.
 
 ### Contract-turn exit codes
 
@@ -254,6 +255,6 @@ This is the exact silent kickoff the web builder sends after an import. From her
 4. **Never run gaia commands in parallel against the same project.** Turns serialize on the server; concurrent calls conflict.
 5. **If `.gaia/project.json` is missing**, prompt the user to run `gaia init` (or use `gaia build "<idea>"` which auto-inits). Don't guess a `projectId`.
 6. **Inline the full spec — never a path or a summary.** When the user points at a spec/doc file, read it and pass its COMPLETE contents to `gaia build`. The harness can't see local files.
-7. **Relay build-pipeline progress as terse plain-text lines** (one per stage) and finish with the literal `app_launcher` URL. Never paraphrase or guess the launcher URL.
+7. **The live build checklist is the CLI's stderr stream in the command cell** (run `gaia build > .gaia/build-events.jsonl`). After exit, summarize with ONE line + the literal launcher URL from the final stderr line. Never re-enumerate stages, never paraphrase or guess the URL.
 8. **Run gaia commands in the foreground, never backgrounded.** No `Start-Process`, `nohup`, `&`, or redirect-and-poll — every gaia command exits on its own, and on Windows `gaia` is an npm `.cmd` shim that `Start-Process` can't launch.
 9. **If `gaia` isn't installed**, tell the user to run `npm i -g "@gainable.dev/cli"` — this plugin doesn't bundle the binary.
