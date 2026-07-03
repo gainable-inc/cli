@@ -124,8 +124,9 @@ Streams stage events as JSON Lines (stdout). Exits `0` on success, `3` on build 
 
 3. Poll `BashOutput` every 2-3 seconds until `build_complete` arrives. Don't poll faster — Claude Code rate-limits tool calls under heavy use. For each batch of new JSON lines, act on the events:
    - `workflow_stage_started` event:
-     - Call `TaskCreate({ subject: payload.title, activeForm: "Running: " + payload.title })`. Remember the `taskId` returned.
+     - Call `TaskCreate({ subject: payload.title, description: "Gaia build pipeline stage: " + payload.title, activeForm: "Running: " + payload.title })`. Both `subject` AND `description` are required — omitting `description` fails with "Invalid tool parameters". Remember the `taskId` returned.
      - Immediately `TaskUpdate({ taskId, status: "in_progress" })`.
+     - If a `TaskCreate`/`TaskUpdate` call is rejected anyway (tool schema drift across Claude Code versions), don't retry-loop or stall the build tracking — fall back to the chat-backup lines (step 4) as the only progress rail and keep polling.
    - `workflow_stage_complete` event:
      - Find the task currently in `in_progress` — that's always the most-recent one because stages run sequentially. No need to track `stageIndex` → task ID mappings.
      - `TaskUpdate({ taskId, status: "completed" })`. If `payload.filesCreated` is present, also update the `subject` to suffix the count: `payload.title + " (" + payload.filesCreated + " files)"`.
