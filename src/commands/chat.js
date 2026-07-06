@@ -16,12 +16,18 @@ const { fail } = require('../util');
  * build event stream.
  *
  * Exit codes:
- *   0 — completion_ready (success)
+ *   0 — completion_ready / workflow_complete (success)
  *   1 — transport error
  *   2 — planner_clarification (user owes a reply; just run `gaia chat`
  *       again with their answer — the server detects the pending
  *       clarification and merges the answer in)
- *   3 — agent_error / validation / auth
+ *   3 — agent_error / workflow_stage_failed / workflow_abandoned /
+ *       validation / auth
+ *
+ * Multi-stage refines: when the planner decomposes a request into several
+ * build stages (a "workflow"), the server auto-accepts and runs them — the
+ * CLI streams workflow_stage_* progress and terminates on workflow_complete.
+ * No manual "Build All" click is required in this headless flow.
  */
 
 async function* parseSse(response) {
@@ -97,11 +103,32 @@ module.exports = (program) => {
           process.exit(2);
         } else if (evt === 'planner_plan_ready') {
           process.stderr.write(`  ▶ plan: ${p.plan?.title || '(building…)'}\n`);
+        } else if (evt === 'workflow_plan_ready') {
+          // Multi-stage refine: the server decomposed the request into ordered
+          // build stages and auto-accepts them (no manual "Build All" needed
+          // in the headless flow). Report the plan so the run isn't opaque.
+          const titles = (p.stages || []).map((s) => s.title).filter(Boolean);
+          process.stderr.write(`  ▶ workflow: ${titles.length} stage(s)${titles.length ? ' — ' + titles.join(' → ') : ''}\n`);
+        } else if (evt === 'workflow_stage_started') {
+          const n = typeof p.stageIndex === 'number' ? p.stageIndex + 1 : p.stageIndex;
+          process.stderr.write(`  ▶ stage ${n}/${p.totalStages || '?'}: ${p.title || p.type || 'building'}\n`);
+        } else if (evt === 'workflow_stage_complete') {
+          const n = typeof p.stageIndex === 'number' ? p.stageIndex + 1 : p.stageIndex;
+          process.stderr.write(`  ✓ stage ${n} complete\n`);
         } else if (evt === 'agent_started') {
           process.stderr.write(`  ▶ ${p.title || p.agent || 'building'}\n`);
         } else if (evt === 'agent_error') {
           process.stderr.write(`  ✗ ${p.error || 'agent error'}\n`);
           process.exit(3);
+        } else if (evt === 'workflow_stage_failed') {
+          process.stderr.write(`  ✗ stage failed: ${p.error || 'workflow stage error'}\n`);
+          process.exit(3);
+        } else if (evt === 'workflow_abandoned') {
+          process.stderr.write('  ✗ workflow abandoned (build stage lost its client)\n');
+          process.exit(3);
+        } else if (evt === 'workflow_complete') {
+          process.stderr.write(`  ✓ done (${p.totalStages || '?'} stage(s))\n`);
+          process.exit(0);
         } else if (evt === 'completion_ready') {
           process.stderr.write('  ✓ done\n');
           process.exit(0);
