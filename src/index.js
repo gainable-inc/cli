@@ -15,6 +15,7 @@ require('./commands/build')(program);
 require('./commands/chat')(program);
 require('./commands/code')(program);
 require('./commands/import')(program);
+require('./commands/dataset')(program);
 require('./commands/publish')(program);
 
 program.parseAsync(process.argv).catch((err) => {

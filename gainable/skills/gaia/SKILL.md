@@ -1,6 +1,6 @@
 ---
 name: gaia
-description: Use this skill as the DEFAULT for ANY change to a Gainable app — adding features, editing views, adding KPIs, fixing bugs, refining behavior, changing layouts, modifying routes, anything app-related. Also handles building a new app from idea, attaching a spreadsheet, listing apps, credentials. The harness's planner + BuildAgent do the work server-side via `gaia chat` / `gaia build` — you just relay the user's request (one cheap HTTP turn, no preflight, no local mirror). ONLY skip this skill in favor of `gaia-code` when the user EXPLICITLY opts Claude into author-mode with phrases like "code it yourself", "write it manually", "without using Gaia/the harness/the planner", "I want YOU to do the coding". Plain refinements like "add X to view Y", "fix Z", "change the layout" stay with THIS skill.
+description: Use this skill as the DEFAULT for ANY change to a Gainable app — adding features, editing views, adding KPIs, fixing bugs, refining behavior, changing layouts, modifying routes, anything app-related. Also handles building a new app from idea, attaching a spreadsheet, listing apps, credentials, and creating or syncing DATASETS — including recurring data pipelines ("sync my data every day", "collect from an API on a schedule", "keep this dataset up to date") via `gaia dataset`. The harness's planner + BuildAgent do the work server-side via `gaia chat` / `gaia build` — you just relay the user's request (one cheap HTTP turn, no preflight, no local mirror). ONLY skip this skill in favor of `gaia-code` when the user EXPLICITLY opts Claude into author-mode with phrases like "code it yourself", "write it manually", "without using Gaia/the harness/the planner", "I want YOU to do the coding". Plain refinements like "add X to view Y", "fix Z", "change the layout" stay with THIS skill.
 ---
 
 # Gainable harness — CLI control plane
@@ -198,6 +198,11 @@ For refinements on an already-built project (adding fields, fixing a view, chang
 | `gaia import upload <file>` | Upload an xlsx/xls/csv to start the ImportAgent question loop. |
 | `gaia import state` / `answer <json>` / `finalize` / `cancel` | Walk the ImportAgent loop (see below). |
 | `gaia import attach` | Bridge a finalized import into the build journey: create the dataset (rows ingested), auto-create the project if needed, attach. |
+| `gaia dataset create <input>` | Create a STANDALONE dataset from JSON rows or a spreadsheet (`-` reads JSON from stdin). Walks the same Q&A loop as `gaia import`. |
+| `gaia dataset answer <json>` | Answer the analyzer's pending question during `dataset create`; auto-completes the dataset when the agent proposes. |
+| `gaia dataset schema <id>` | **Print the dataset's write contract** — required keys, primary key, per-field form. Read this BEFORE writing any collector script. |
+| `gaia dataset sync <id> [input]` | Replace the dataset's contents with a full snapshot. |
+| `gaia dataset list [-q text]` | List datasets with providers, row counts, last sync. |
 | `gaia login` / `gaia logout` | Credential management. Usually the user has already done this. |
 
 ## Refining a built app — `gaia chat`
@@ -285,6 +290,64 @@ gaia build --silent "Let's get started. Analyze the attached data and propose an
 
 This is the exact silent kickoff the web builder sends after an import — the agent analyzes the attached dataset and proposes the contract. From here it's the normal **build journey** (see "Building a new app — `gaia build`" above): forward `interactiveOptions` to the user, reply with `gaia build --reply`, and when `phase === 'autonomy'` with no asks, kick the pipeline with `gaia build` (no args) — TaskList checklist and all.
 
+## Recurring data → Gainable (`gaia dataset`)
+
+When the user wants a script that collects data on a schedule (every 24h, from APIs or anywhere else) and feeds it into Gainable, the shape is **create once, sync forever**. This is a different journey from `gaia import`, which exists to bootstrap an app from a spreadsheet — `gaia dataset` makes a standalone dataset that a script keeps fresh.
+
+Rows go in as **JSON**. There is no need to write a CSV to disk first.
+
+### The three rules
+
+1. **Full snapshot, always.** Every sync REPLACES the entire dataset. Your script must emit every row that should exist, every time — never a delta, never just today's rows. Rows missing from the payload are DELETED. That is intentional: it's how corrections and deletions propagate, and it means a missed run costs nothing.
+2. **The shape is frozen at creation.** The dataset remembers the exact keys from the seed data. A sync missing any of them is rejected wholesale (`drift`) and **nothing is written**. Extra keys are fine; renamed or removed keys are not. To change the shape, create a NEW dataset.
+3. **Read the contract before writing the script.** `gaia dataset schema <id>` returns exactly what to emit. Never infer the shape from memory of the seed data.
+
+### Step 1 — create (once)
+
+Seed with **5-20 representative real rows**. The analyzer infers column types and picks the primary key from actual values, and that choice is frozen for the dataset's life — a one-row seed produces a bad schema you cannot fix later.
+
+```bash
+node ./collect.js | gaia dataset create - --name "Ops Metrics"
+```
+
+Exit `2` means the analyzer is asking a question — same protocol as `gaia import`. Present it via `AskUserQuestion`, then:
+
+```bash
+gaia dataset answer '{"choice":"..."}'
+```
+
+Loop until exit `0`. The final stdout carries `collectionId` **and the full write contract** — you do not need a second call.
+
+A spreadsheet works too (`gaia dataset create ./seed.xlsx`), and transports are interchangeable afterwards: a dataset seeded from a workbook can still be synced from JSON. The CLI resolves the sheet name from the saved contract, so your collector never has to know it.
+
+### Step 2 — write the collector
+
+Read `shape.requiredKeys` and `entities[].fields[]`. Each field carries a `writeAs` telling you the exact form (`"JSON number, not a formatted string"`, `"ISO 8601 date string"`). Two patterns, depending on the source:
+
+```bash
+# Source returns full current state (list all deals, list all repos):
+# pipe it straight through — no local state at all.
+node ./collect.js | gaia dataset sync col_abc -
+
+# Append-only source (daily metrics, event logs): the script owns accumulation.
+node ./collect.js                      # merge new rows into store.json, ATOMICALLY
+gaia dataset sync col_abc ./data/store.json
+```
+
+Prefer the stateless shape when the API supports it — it's self-healing. If you must keep a local store, write it atomically (temp file + rename) so a crash never leaves a truncated snapshot.
+
+### Step 3 — sync (every run)
+
+```bash
+gaia dataset sync col_ab12cd34ef56 -
+```
+
+Exit `0` prints per-entity `{inserted, updated, deleted}`. Exit `3` with `reason: "drift"` means the payload no longer matches the contract — stderr names the exact keys, and **nothing was written**. Fix the shape; do not retry blindly.
+
+The CLI refuses a sync whose primary keys barely overlap what is already stored (`--min-overlap`, default 0.5), because that is the signature of a truncated payload or a regenerated key. If the turnover is genuinely intentional, pass `--force`.
+
+`gaia dataset sync <id>` with **no input** is for Google Sheets / Excel-Online / Airtable datasets, which re-fetch from upstream. `gaia dataset schema` tells you which kind you have.
+
 ## Hard rules
 
 1. **Never edit local code** as if it's the app. The app is on the Gainable server. Local files are metadata + transcripts only.
@@ -294,3 +357,6 @@ This is the exact silent kickoff the web builder sends after an import — the a
 5. **If `.gaia/project.json` is missing**, prompt the user to run `gaia init`. Don't guess a `projectId`.
 6. **Inline the full spec — never a path or a summary.** When the user points at a spec/doc file, `Read` it and pass its COMPLETE contents to `gaia build`. The harness can't see local files; a path or paraphrase makes it design from generic domain knowledge instead of the spec.
 7. **Always render the build pipeline as a TaskList checklist.** Run the no-args `gaia build` with `run_in_background: true` and drive `TaskCreate`/`TaskUpdate` from the streamed stage events. Never foreground the pipeline or text-relay stage results in place of the checklist.
+8. **Choose a dataset primary key that can never change, and never regenerate it.** The app derives each row's comment/file thread id from its primary key value. Use a natural key that comes from the data source itself — an upstream record id, a canonical slug. Never an array index, a row number, a `collected_at` timestamp, or a hash of fields that can be edited. A rotating key silently destroys every attached comment and file on the next sync, and the row counts look perfectly normal while it happens.
+9. **Never sync a partial payload.** `gaia dataset sync` deletes rows absent from it. If your collector failed partway, abort the sync — do not send what you managed to collect.
+10. **Never write a collector script from memory of a dataset's shape.** Run `gaia dataset schema <id>` and follow its contract literally — keys are matched exactly and a mismatch rejects the whole sync.

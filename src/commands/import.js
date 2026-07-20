@@ -4,63 +4,24 @@ const http = require('../http');
 const credentials = require('../credentials');
 const project = require('../project');
 const { fail } = require('../util');
+const session = require('../importSession');
 
-const STATE_FILE = 'import-session.json';
-
-/**
- * Where to store the active import session id locally.
- *   - Inside a .gaia/ project workspace: keep it there.
- *   - Otherwise: ~/.gainable/import-session.json so subsequent commands in
- *     the same shell can find the session without --session.
- */
-function stateLocation() {
-  try {
-    const found = project.findProjectDir();
-    if (found?.gaiaDir) return { dir: found.gaiaDir, file: path.join(found.gaiaDir, STATE_FILE) };
-  } catch { /* malformed project.json — fall through to global */ }
-  const dir = path.dirname(credentials.CREDENTIALS_PATH);
-  return { dir, file: path.join(dir, STATE_FILE) };
-}
-
-function saveState(state) {
-  const { dir, file } = stateLocation();
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(state, null, 2));
-}
-
-function loadState() {
-  const { file } = stateLocation();
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
-}
-
-function clearState() {
-  const { file } = stateLocation();
-  try { fs.unlinkSync(file); return true; } catch { return false; }
-}
+// Session state + analyzer transport live in ../importSession so `gaia import`
+// and `gaia dataset` drive the identical protocol against one implementation.
+const {
+  STATE_FILE,
+  stateLocation,
+  saveState,
+  loadState,
+  clearState,
+  persistTurnResponse,
+} = session;
 
 function resolveSessionId(flag) {
   if (flag) return flag;
   const s = loadState();
   if (s?.importSessionId) return s.importSessionId;
   throw fail('no active import session — pass --session <id> or run `gaia import upload <file>` first');
-}
-
-/**
- * After every turn, the server returns a state snapshot. Persist the bits
- * the next command needs (sessionId, toolUseId for replies) so the CLI
- * stays stateless from the user's perspective.
- */
-function persistTurnResponse(response) {
-  if (!response?.importSessionId) return;
-  const next = {
-    importSessionId: response.importSessionId,
-    fileName: response.fileName || null,
-    state: response.state || null,
-    toolUseId: response.toolUseId || null,
-    question: response.question || null,
-    savedAt: new Date().toISOString()
-  };
-  saveState(next);
 }
 
 module.exports = (program) => {
@@ -77,28 +38,8 @@ module.exports = (program) => {
       const buffer = fs.readFileSync(abs);
       const name = path.basename(abs);
 
-      const creds = credentials.requireAuth();
-      const form = new FormData();
-      form.append('file', new Blob([buffer]), name);
-
       process.stderr.write(`→ uploading ${name} (${buffer.length} bytes)\n`);
-      const url = creds.apiBase.replace(/\/$/, '') + '/api/excel-import/start';
-      let response;
-      try {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${creds.apiKey}` },
-          body: form
-        });
-      } catch (err) {
-        throw fail(`could not reach ${creds.apiBase}: ${err.message}`, 1);
-      }
-      const text = await response.text();
-      let parsed = null;
-      if (text) { try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; } }
-      if (!response.ok) {
-        throw fail(parsed?.error || `HTTP ${response.status}`, response.status >= 500 ? 1 : 3);
-      }
+      const parsed = await session.startFileSession({ buffer, fileName: name });
 
       persistTurnResponse(parsed);
       process.stdout.write(JSON.stringify(parsed, null, 2) + '\n');
@@ -111,7 +52,7 @@ module.exports = (program) => {
     .option('--session <id>', 'override session (default: last from local state)')
     .action(async (opts) => {
       const id = resolveSessionId(opts.session);
-      const data = await http.get(`/api/excel-import/state?importSessionId=${encodeURIComponent(id)}`);
+      const data = await session.getSessionState(id);
       persistTurnResponse(data);
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       if (data.state === 'question') process.exit(2);
@@ -131,7 +72,7 @@ module.exports = (program) => {
       try { answers = JSON.parse(answersRaw); }
       catch (err) { throw fail(`<answers> must be valid JSON: ${err.message}`); }
 
-      const data = await http.post('/api/excel-import/answer', { importSessionId, toolUseId, answers });
+      const data = await session.answerTurn({ importSessionId, toolUseId, answers });
       persistTurnResponse(data);
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       if (data.state === 'question') process.exit(2);
@@ -143,7 +84,7 @@ module.exports = (program) => {
     .option('--session <id>', 'override session')
     .action(async (opts) => {
       const importSessionId = resolveSessionId(opts.session);
-      const data = await http.post('/api/excel-import/finalize', { importSessionId });
+      const data = await session.finalizeSession(importSessionId);
       // finalize doesn't change the asked-question state; just write the
       // proposal-ready snapshot so callers can re-read it.
       saveState({
@@ -164,7 +105,7 @@ module.exports = (program) => {
     .option('--session <id>', 'override session')
     .action(async (opts) => {
       const importSessionId = resolveSessionId(opts.session);
-      const data = await http.post('/api/excel-import/cancel', { importSessionId });
+      const data = await session.cancelSession(importSessionId);
       clearState();
       process.stdout.write(JSON.stringify({ ...data, importSessionId }) + '\n');
     });
@@ -203,13 +144,12 @@ module.exports = (program) => {
           datasetName = stem || 'Imported Data';
         }
         process.stderr.write(`→ creating dataset "${datasetName}" from session ${importSessionId}\n`);
-        const created = await http.post('/api/data/collections', {
-          name: datasetName,
-          sources: [{ provider: 'file-upload', importSessionId }]
+        const created = await session.createCollectionFromSession({
+          importSessionId,
+          name: datasetName
         });
-        collectionId = created?.collection?.collectionId || created?.collection?.id;
-        if (!collectionId) throw fail('dataset created but no collectionId in response', 1);
-        datasetName = created.collection.name || datasetName;
+        collectionId = created.collectionId;
+        datasetName = created.name;
         // The session is consumed now — persist the collectionId so a
         // retry after a downstream failure skips re-creation.
         saveState({
