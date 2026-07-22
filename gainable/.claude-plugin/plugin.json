@@ -1,6 +1,6 @@
 {
   "name": "gainable",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Gainable harness control plane — build, refine, and author code in Gainable apps from Claude Code. Bundles the gaia / gaia-code skills, /gainable:* slash commands, and a SessionStart orientation hook. Requires the gaia CLI: npm i -g \"@gainable.dev/cli\".",
   "author": { "name": "Gainable" },
   "license": "SEE LICENSE IN LICENSE",

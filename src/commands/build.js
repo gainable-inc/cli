@@ -109,26 +109,35 @@ async function* parseSse(response) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) return;
-    buf += decoder.decode(value, { stream: true });
-    let sep;
-    while ((sep = buf.indexOf('\n\n')) >= 0) {
-      const block = buf.slice(0, sep);
-      buf = buf.slice(sep + 2);
-      let eventName = 'message';
-      const dataLines = [];
-      for (const line of block.split('\n')) {
-        if (line.startsWith(':')) continue;
-        if (line.startsWith('event:')) eventName = line.slice(6).trim();
-        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buf += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        let eventName = 'message';
+        const dataLines = [];
+        for (const line of block.split('\n')) {
+          if (line.startsWith(':')) continue;
+          if (line.startsWith('event:')) eventName = line.slice(6).trim();
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        }
+        if (dataLines.length === 0) continue;
+        let payload;
+        try { payload = JSON.parse(dataLines.join('\n')); } catch { continue; }
+        yield { eventName, payload };
       }
-      if (dataLines.length === 0) continue;
-      let payload;
-      try { payload = JSON.parse(dataLines.join('\n')); } catch { continue; }
-      yield { eventName, payload };
     }
+  } finally {
+    // Exiting with a read still pending on the fetch body tears the loop
+    // down mid-close and trips a libuv assertion on Windows
+    // (`!(handle->flags & UV_HANDLE_CLOSING)`, src\win\async.c:76) — the
+    // CLI prints its success line and THEN crashes. Breaking out of the
+    // `for await` runs this finally first, releasing the socket.
+    try { await reader.cancel(); } catch { /* stream already torn down */ }
   }
 }
 
@@ -218,10 +227,16 @@ function makeSpinner() {
 
 async function kickPipeline(ctx) {
   process.stderr.write(`→ build start: ${ctx.projectId}\n`);
-  await http.post(`/api/projects/${encodeURIComponent(ctx.projectId)}/build`);
+  const started = await http.post(`/api/projects/${encodeURIComponent(ctx.projectId)}/build`);
+
+  // Replay cursor for THIS build. Without it the server replays a
+  // wall-clock window, which can include a previous turn's terminal event
+  // and close the stream before this build has emitted anything.
+  const cursor = Number.isFinite(started?.cursor) ? started.cursor : null;
 
   const creds = credentials.requireAuth();
-  const url = `${creds.apiBase.replace(/\/$/, '')}/api/builds/${encodeURIComponent(ctx.projectId)}/events`;
+  const url = `${creds.apiBase.replace(/\/$/, '')}/api/builds/${encodeURIComponent(ctx.projectId)}/events`
+    + (cursor !== null ? `?after=${cursor}` : '');
   let response;
   try {
     response = await fetch(url, {
@@ -254,8 +269,12 @@ async function kickPipeline(ctx) {
   // a raw click can't supply, so it 401s / renders empty. The main-app
   // /apps/:appName route serves an authenticated launcher that wraps
   // the app in the right iframe.
+  //
+  // Returns the exit code once the outcome is known, or null if we're still
+  // waiting on build_complete. The caller breaks out of the stream on a
+  // non-null result rather than exiting inline — see parseSse's finally.
   const finalize = () => {
-    if (!buildResult) return; // no build_complete yet
+    if (!buildResult) return null; // no build_complete yet
     spinner.stop();
     if (buildResult.success) {
       const launcherUrl = builtAppName
@@ -273,13 +292,13 @@ async function kickPipeline(ctx) {
       } else {
         process.stderr.write(`${ANSI.green}✓ build succeeded${ANSI.reset}\n`);
       }
-      process.exit(0);
-    } else {
-      process.stderr.write(`${ANSI.red}✗ build failed: ${buildResult.error || 'unknown'}${ANSI.reset}\n`);
-      process.exit(3);
+      return 0;
     }
+    process.stderr.write(`${ANSI.red}✗ build failed: ${buildResult.error || 'unknown'}${ANSI.reset}\n`);
+    return 3;
   };
 
+  let exitCode = null;
   for await (const { payload } of parseSse(response)) {
     process.stdout.write(JSON.stringify(payload) + '\n');
     const evt = payload.event;
@@ -299,24 +318,30 @@ async function kickPipeline(ctx) {
       // If build_complete already landed (success path), this is the
       // last piece we need — finalize. Failures don't reach this event.
       if (p.appName) builtAppName = p.appName;
-      finalize();
+      exitCode = finalize();
+      if (exitCode !== null) break;
     } else if (evt === 'build_complete') {
       // Capture outcome but defer the exit — on success, we wait for
       // app_ready so we can include the launcher URL. On failure, no
       // app_ready will arrive (failure short-circuits earlier), so
       // finalize immediately.
       buildResult = { success: !!p.success, error: p.error };
-      if (!buildResult.success) finalize();
+      if (!buildResult.success) {
+        exitCode = finalize();
+        if (exitCode !== null) break;
+      }
     } else if (evt === 'workflow_complete') {
       // Belt-and-suspenders: if app_ready was dropped or never reached
       // us, the terminal workflow_complete still finalizes the build.
-      finalize();
+      exitCode = finalize();
+      if (exitCode !== null) break;
     }
   }
   // Stream ended naturally. If we have a buildResult but never saw
   // app_ready / workflow_complete, finalize with no launcher URL.
-  finalize();
-  if (!buildResult) throw fail('event stream ended before build_complete', 1);
+  if (exitCode === null) exitCode = finalize();
+  if (exitCode === null) throw fail('event stream ended before build_complete', 1);
+  process.exit(exitCode);
 }
 
 // Auto-init: when the user runs `gaia build "<idea>"` in an empty

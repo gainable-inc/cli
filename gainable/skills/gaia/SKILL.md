@@ -217,6 +217,9 @@ Streams JSON events to stdout (one per line) plus human-readable progress to std
 - `2` — `planner_clarification` (the planner is asking the user a clarifying question). Forward the `question` + `options` to the user via `AskUserQuestion`, then run `gaia chat "<the user's answer>"`. The server detects the pending clarification and merges the answer in — no special flag needed.
 - `3` — `agent_error` or build failure. Show the error to the user.
 - `1` — transport error.
+- `4` — a turn is already running for this project. **Not a failure, and never retry it.** Tell the user the previous change is still building; send the next message once it lands.
+
+**One `gaia chat` per user request — never re-send the same message.** Each call is a full turn (planner → plan → BuildAgent → validation) and can take well over a minute. The turn runs server-side and keeps running no matter what happens to your process, so a second call does NOT "retry" anything: it runs the planner again, posts the user's request to the app a second time, and stacks a duplicate plan card that a human has to clear by hand in the web UI. If a call exits non-zero without a clear `agent_error`, or exits suspiciously fast, say what happened and ask the user before re-sending.
 
 Key events to watch in the JSON stream:
 - `planner_analyzing` — agent is thinking
